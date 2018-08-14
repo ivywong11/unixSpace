@@ -1,0 +1,17 @@
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <dirent.h>
+int main(int arg,char *argv[])
+{
+	DIR *dp;
+	struct dirent *dirp;
+	if(arg != 2)
+		printf("usage : ls directory_name");
+	if((dp = opendir(argv[1])) == NULL)
+		printf("can't open %s",argv[1]);
+	while((dirp = readdir(dp)) != NULL)
+		printf("%s\n" , dirp->d_name);
+	closedir(dp);
+	exit(0);
+}
