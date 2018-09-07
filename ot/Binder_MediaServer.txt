@@ -1,0 +1,419 @@
+*******************************************************************************************
+/system/core/rootdir/init.rc
+mediaserver
+//是否需要记录日志,主线程启动一个MediaLogService在子线程暂停时记录日志，子线程启动服务
+if (doLog && (childPid = fork()) != 0) {
+*******************************************************************************************
+sp<ProcessState> proc(ProcessState::self());//获得ProcessState实例
+sp<IServiceManager> sm = defaultServiceManager();//返回IServiceManager
+ALOGI("ServiceManager: %p", sm.get());
+AudioFlinger::instantiate();//音频系统AudioFlinger服务
+MediaPlayerService::instantiate();//多媒体系统MediaPlayer服务
+ResourceManagerService::instantiate();//资源管理服务
+CameraService::instantiate();//
+AudioPolicyService::instantiate();//音频系统AudioPolicy服务
+SoundTriggerHwService::instantiate();
+RadioService::instantiate();
+registerExtensions();
+ProcessState::self()->startThreadPool();
+IPCThreadState::self()->joinThreadPool();
+*******************************************************************************************
+/frameworks/native/libs/binder/ProcessState.cpp
+sp<ProcessState> ProcessState::self()
+{
+    Mutex::Autolock _l(gProcessMutex);
+    if (gProcess != NULL) {
+        return gProcess;
+    }
+    gProcess = new ProcessState;
+    return gProcess;
+}
+//单例模式，返回ProcessState对象
+*******************************************************************************************
+/frameworks/native/libs/binder/IServiceManager.cpp
+defaultServiceManager
+sp<IServiceManager> defaultServiceManager()
+{
+    if (gDefaultServiceManager != NULL) return gDefaultServiceManager;
+
+    {
+        AutoMutex _l(gDefaultServiceManagerLock);
+        while (gDefaultServiceManager == NULL) {
+            gDefaultServiceManager = interface_cast<IServiceManager>(
+                ProcessState::self()->getContextObject(NULL));
+            if (gDefaultServiceManager == NULL)
+                sleep(1);
+        }
+    }
+
+    return gDefaultServiceManager;
+}
+*******************************************************************************************
+getContextObject(NULL)=>return getStrongProxyForHandle(0);
+b = new BpBinder(handle);
+            e->binder = b;
+            if (b) e->refs = b->getWeakRefs();
+            result = b;
+getContextObject返回的是一个BpBinder
+*******************************************************************************************
+/frameworks/native/include/binder/IInterface.h
+template<typename INTERFACE>
+inline sp<INTERFACE> interface_cast(const sp<IBinder>& obj)
+{
+    return INTERFACE::asInterface(obj);
+}
+inline sp<IServiceManager> interface_cast(const sp<IBinder>& obj)
+{
+    return IServiceManager::asInterface(obj);
+}
+interface_cast在IInterface.h中是一个模板函数，具体定义在IServiceManager中是定义IServiceManager.h中
+*******************************************************************************************
+IServiceManager.h中使用了宏定义DECLARE_META_INTERFACE(ServiceManager);
+#define DECLARE_META_INTERFACE(INTERFACE)                               \
+    static const android::String16 descriptor;                          \
+    static android::sp<I##INTERFACE> asInterface(                       \
+            const android::sp<android::IBinder>& obj);                  \
+    virtual const android::String16& getInterfaceDescriptor() const;    \
+    I##INTERFACE();                                                     \
+    virtual ~I##INTERFACE();     
+替换之后
+#define DECLARE_META_INTERFACE(ServiceManager)                               \
+    //定义了一个描述字符串
+    static const android::String16 descriptor;                          \
+	//定义了一个asInterface函数
+    static android::sp<IServiceManager> asInterface(                       \
+            const android::sp<android::IBinder>& obj);                  \
+	//定义了一个getInterfaceDescriptor返回字符串描述		
+    virtual const android::String16& getInterfaceDescriptor() const;    \
+    IServiceManager();                                                     \
+    virtual ~IServiceManager();
+*******************************************************************************************
+/frameworks/native/libs/binder/IServiceManager.cpp
+具体实现在IServiceManager.cpp中
+IMPLEMENT_META_INTERFACE(ServiceManager, "android.os.IServiceManager");
+83#define IMPLEMENT_META_INTERFACE(INTERFACE, NAME)                       \
+84    const android::String16 I##INTERFACE::descriptor(NAME);             \
+85    const android::String16&                                            \
+86            I##INTERFACE::getInterfaceDescriptor() const {              \
+87        return I##INTERFACE::descriptor;                                \
+88    }                                                                   \
+89    android::sp<I##INTERFACE> I##INTERFACE::asInterface(                \
+90            const android::sp<android::IBinder>& obj)                   \
+91    {                                                                   \
+92        android::sp<I##INTERFACE> intr;                                 \
+93        if (obj != NULL) {                                              \
+94            intr = static_cast<I##INTERFACE*>(                          \
+95                obj->queryLocalInterface(                               \
+96                        I##INTERFACE::descriptor).get());               \
+97            if (intr == NULL) {                                         \
+98                intr = new Bp##INTERFACE(obj);                          \
+99            }                                                           \
+100        }                                                               \
+101        return intr;                                                    \
+102    }                                                                   \
+103    I##INTERFACE::I##INTERFACE() { }                                    \
+104    I##INTERFACE::~I##INTERFACE() { }                                   \
+105
+106
+107#define CHECK_INTERFACE(interface, data, reply)                         \
+108    if (!data.checkInterface(this)) { return PERMISSION_DENIED; }       \
+new BpServiceManager(obj);obj->BpBinder(0);
+*******************************************************************************************
+/frameworks/av/media/libmediaplayerservice/MediaPlayerService.cpp
+void MediaPlayerService::instantiate() {
+    defaultServiceManager()->addService(
+            String16("media.player"), new MediaPlayerService());
+}
+MediaPlayerService返回BpServiceManager,BpServiceManager是BpInterface子类
+class BpInterface : public INTERFACE, public BpRefBase class in namespace:android
+
+155    virtual status_t addService(const String16& name, const sp<IBinder>& service,
+156            bool allowIsolated)
+157    {
+158        Parcel data, reply;
+159        data.writeInterfaceToken(IServiceManager::getInterfaceDescriptor());
+160        data.writeString16(name);
+161        data.writeStrongBinder(service);
+162        data.writeInt32(allowIsolated ? 1 : 0);
+163        status_t err = remote()->transact(ADD_SERVICE_TRANSACTION, data, &reply);
+164        return err == NO_ERROR ? reply.readExceptionCode() : err;
+165    } 
+
+这边remote返回的是,IServiceManager创建时，new的BpBinder(0),所以最后调用的是BpBinder的transact方法
+*******************************************************************************************
+159status_t BpBinder::transact(
+160    uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags)
+161{
+162    // Once a binder has died, it will never come back to life.
+163    if (mAlive) {
+164        status_t status = IPCThreadState::self()->transact(
+165            mHandle, code, data, reply, flags);//mHandle 0
+166        if (status == DEAD_OBJECT) mAlive = 0;
+167        return status;
+168    }
+169
+170    return DEAD_OBJECT;
+171}
+*******************************************************************************************
+280IPCThreadState* IPCThreadState::self()
+281{
+282    if (gHaveTLS) {
+283restart:
+284        const pthread_key_t k = gTLS;//线程本地存储空间
+285        IPCThreadState* st = (IPCThreadState*)pthread_getspecific(k);//从线程本地存储空间获得保存在其中的IPCThreadState对象
+286        if (st) return st;//如果存在就返回，不存在就new一个，构造函数中，会把他自己存进去pthread_setspecific(gTLS, this);
+																							clearCaller();
+																							//Parcel 发送和接收命令的缓冲区
+																							694    mIn.setDataCapacity(256);//接收来自Binder设备的数据
+																							695    mOut.setDataCapacity(256);//发往Binder设备的数据
+287        return new IPCThreadState;
+288    }
+289
+290    if (gShutdown) return NULL;
+291
+292    pthread_mutex_lock(&gTLSMutex);
+293    if (!gHaveTLS) {
+294        if (pthread_key_create(&gTLS, threadDestructor) != 0) {
+295            pthread_mutex_unlock(&gTLSMutex);
+296            return NULL;
+297        }
+298        gHaveTLS = true;
+299    }
+300    pthread_mutex_unlock(&gTLSMutex);
+301    goto restart;
+302}
+303
+*******************************************************************************************
+548status_t IPCThreadState::transact(int32_t handle,
+549                                  uint32_t code, const Parcel& data,
+550                                  Parcel* reply, uint32_t flags)
+......
+563    if (err == NO_ERROR) {
+564        LOG_ONEWAY(">>>> SEND from pid %d uid %d %s", getpid(), getuid(),
+565            (flags & TF_ONE_WAY) == 0 ? "READ REPLY" : "ONE WAY");
+//BC_TRANSACTION应用程序向binder设备发送消息的消息码
+566        err = writeTransactionData(BC_TRANSACTION, flags, handle, code, data, NULL);
+567    }
+......
+err = waitForResponse(reply);
+*******************************************************************************************
+904status_t IPCThreadState::writeTransactionData(int32_t cmd, uint32_t binderFlags,
+905    int32_t handle, uint32_t code, const Parcel& data, status_t* statusBuffer)
+906{
+907    binder_transaction_data tr;
+908
+909    tr.target.ptr = 0; /* Don't pass uninitialized stack data to a remote process */
+910    tr.target.handle = handle;//用来识别发给谁处理，0就是ServiceManager
+911    tr.code = code;//服务端的处理方法标识
+912    tr.flags = binderFlags;
+913    tr.cookie = 0;
+914    tr.sender_pid = 0;
+915    tr.sender_euid = 0;
+916
+917    const status_t err = data.errorCheck();
+918    if (err == NO_ERROR) {
+919        tr.data_size = data.ipcDataSize();
+920        tr.data.ptr.buffer = data.ipcData();
+921        tr.offsets_size = data.ipcObjectsCount()*sizeof(binder_size_t);
+922        tr.data.ptr.offsets = data.ipcObjects();
+923    } else if (statusBuffer) {
+924        tr.flags |= TF_STATUS_CODE;
+925        *statusBuffer = err;
+926        tr.data_size = sizeof(status_t);
+927        tr.data.ptr.buffer = reinterpret_cast<uintptr_t>(statusBuffer);
+928        tr.offsets_size = 0;
+929        tr.data.ptr.offsets = 0;
+930    } else {
+931        return (mLastError = err);
+932    }
+933
+934    mOut.writeInt32(cmd);//命令写到mOut中
+935    mOut.write(&tr, sizeof(tr));
+936
+937    return NO_ERROR;
+938}
+*******************************************************************************************
+712status_t IPCThreadState::waitForResponse(Parcel *reply, status_t *acquireResult)
+713{
+714    uint32_t cmd;
+715    int32_t err;
+716
+717    while (1) {
+718        if ((err=talkWithDriver()) < NO_ERROR) break;
+719        err = mIn.errorCheck();
+720        if (err < NO_ERROR) break;
+721        if (mIn.dataAvail() == 0) continue;
+722
+723        cmd = (uint32_t)mIn.readInt32();
+724
+725        IF_LOG_COMMANDS() {
+726            alog << "Processing waitForResponse Command: "
+727                << getReturnString(cmd) << endl;
+728        }
+729
+730        switch (cmd) {
+731        case BR_TRANSACTION_COMPLETE:
+732            if (!reply && !acquireResult) goto finish;
+733            break;
+734
+735        case BR_DEAD_REPLY:
+736            err = DEAD_OBJECT;
+737            goto finish;
+738
+739        case BR_FAILED_REPLY:
+740            err = FAILED_TRANSACTION;
+741            goto finish;
+742
+743        case BR_ACQUIRE_RESULT:
+744            {
+745                ALOG_ASSERT(acquireResult != NULL, "Unexpected brACQUIRE_RESULT");
+746                const int32_t result = mIn.readInt32();
+747                if (!acquireResult) continue;
+748                *acquireResult = result ? NO_ERROR : INVALID_OPERATION;
+749            }
+750            goto finish;
+751
+752        case BR_REPLY:
+753            {
+754                binder_transaction_data tr;
+755                err = mIn.read(&tr, sizeof(tr));
+756                ALOG_ASSERT(err == NO_ERROR, "Not enough command data for brREPLY");
+757                if (err != NO_ERROR) goto finish;
+758
+759                if (reply) {
+760                    if ((tr.flags & TF_STATUS_CODE) == 0) {
+761                        reply->ipcSetDataReference(
+762                            reinterpret_cast<const uint8_t*>(tr.data.ptr.buffer),
+763                            tr.data_size,
+764                            reinterpret_cast<const binder_size_t*>(tr.data.ptr.offsets),
+765                            tr.offsets_size/sizeof(binder_size_t),
+766                            freeBuffer, this);
+767                    } else {
+768                        err = *reinterpret_cast<const status_t*>(tr.data.ptr.buffer);
+769                        freeBuffer(NULL,
+770                            reinterpret_cast<const uint8_t*>(tr.data.ptr.buffer),
+771                            tr.data_size,
+772                            reinterpret_cast<const binder_size_t*>(tr.data.ptr.offsets),
+773                            tr.offsets_size/sizeof(binder_size_t), this);
+774                    }
+775                } else {
+776                    freeBuffer(NULL,
+777                        reinterpret_cast<const uint8_t*>(tr.data.ptr.buffer),
+778                        tr.data_size,
+779                        reinterpret_cast<const binder_size_t*>(tr.data.ptr.offsets),
+780                        tr.offsets_size/sizeof(binder_size_t), this);
+781                    continue;
+782                }
+783            }
+784            goto finish;
+785
+786        default:
+787            err = executeCommand(cmd);
+788            if (err != NO_ERROR) goto finish;
+789            break;
+790        }
+791    }
+792
+793finish:
+794    if (err != NO_ERROR) {
+795        if (acquireResult) *acquireResult = err;
+796        if (reply) reply->setError(err);
+797        mLastError = err;
+798    }
+799
+800    return err;
+801}
+802
+947status_t IPCThreadState::executeCommand(int32_t cmd)
+948{
+......
+1026    case BR_TRANSACTION:
+1027        {
+1028            binder_transaction_data tr;
+1029            result = mIn.read(&tr, sizeof(tr));//从mIn读取
+1030            ALOG_ASSERT(result == NO_ERROR,
+1031                "Not enough command data for brTRANSACTION");
+1032            if (result != NO_ERROR) break;
+1033
+1034            Parcel buffer;
+1035            buffer.ipcSetDataReference(
+......
+1071
+1072            Parcel reply;
+1073            status_t error;
+1074            IF_LOG_TRANSACTIONS() {
+1075                TextOutput::Bundle _b(alog);
+1076                alog << "BR_TRANSACTION thr " << (void*)pthread_self()
+1077                    << " / obj " << tr.target.ptr << " / code "
+1078                    << TypeCode(tr.code) << ": " << indent << buffer
+1079                    << dedent << endl
+1080                    << "Data addr = "
+1081                    << reinterpret_cast<const uint8_t*>(tr.data.ptr.buffer)
+1082                    << ", offsets addr="
+1083                    << reinterpret_cast<const size_t*>(tr.data.ptr.offsets) << endl;
+1084            }
+1085            if (tr.target.ptr) {
+1086                sp<BBinder> b((BBinder*)tr.cookie);
+1087                error = b->transact(tr.code, buffer, &reply, tr.flags);
+1088
+1089            } else {
+1090                error = the_context_object->transact(tr.code, buffer, &reply, tr.flags);
+1091            }
+......
+*******************************************************************************************
+/frameworks/native/libs/binder/ProcessState.cpp
+132void ProcessState::startThreadPool()
+133{
+134    AutoMutex _l(mLock);
+135    if (!mThreadPoolStarted) {
+136        mThreadPoolStarted = true;
+137        spawnPooledThread(true);
+138    }
+139}
+286void ProcessState::spawnPooledThread(bool isMain)
+287{
+288    if (mThreadPoolStarted) {
+289        String8 name = makeBinderThreadName();
+290        ALOGV("Spawning new pooled thread, name=%s\n", name.string());
+291        sp<Thread> t = new PoolThread(isMain);
+292        t->run(name.string());
+293    }
+294}
+//每个进程有一个ProcessState,PoolThread是一个线程类.初始化的时候会创建一个IPCThreadState
+*******************************************************************************************
+477void IPCThreadState::joinThreadPool(bool isMain)
+478{
+479    LOG_THREADPOOL("**** THREAD %p (PID %d) IS JOINING THE THREAD POOL\n", (void*)pthread_self(), getpid());
+480
+481    mOut.writeInt32(isMain ? BC_ENTER_LOOPER : BC_REGISTER_LOOPER);
+482
+483    // This thread may have been spawned by a thread that was in the background
+484    // scheduling group, so first we will make sure it is in the foreground
+485    // one to avoid performing an initial transaction in the background.
+486    set_sched_policy(mMyThreadId, SP_FOREGROUND);
+487
+488    status_t result;
+489    do {
+490        processPendingDerefs();
+491        // now get the next command to be processed, waiting if necessary
+492        result = getAndExecuteCommand();
+493
+494        if (result < NO_ERROR && result != TIMED_OUT && result != -ECONNREFUSED && result != -EBADF) {
+495            ALOGE("getAndExecuteCommand(fd=%d) returned unexpected error %d, aborting",
+496                  mProcess->mDriverFD, result);
+497            abort();
+498        }
+499
+500        // Let this thread exit the thread pool if it is no longer
+501        // needed and it is not the main process thread.
+502        if(result == TIMED_OUT && !isMain) {
+503            break;
+504        }
+505    } while (result != -ECONNREFUSED && result != -EBADF);
+506
+507    LOG_THREADPOOL("**** THREAD %p (PID %d) IS LEAVING THE THREAD POOL err=%p\n",
+508        (void*)pthread_self(), getpid(), (void*)result);
+509
+510    mOut.writeInt32(BC_EXIT_LOOPER);
+511    talkWithDriver(false);
+512}
