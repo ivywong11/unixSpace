@@ -5,3 +5,7 @@ objcopy
 -O 输出文件格式
 http://blog.sina.com.cn/s/blog_4ae5be930100nyfw.html
 objcopy -I binary -O elf64-x86-64 image.jpg image.o
+
+处理器对
+以2到整数次方对齐的取值运算
+相比非对齐状态下速度快很多
