@@ -1,0 +1,7 @@
+ize默认是运行在"Berkeley compatibility mode"下。在这种模式下，会将不可执行的拥有"ALLOC"属性的只读段归到.text段下，很典型的就是.rodata段。如果你使用"size -A obj.o"，那么size会运行在"System V compatibility mode"
+
+objcopy
+-I 源文件格式
+-O 输出文件格式
+http://blog.sina.com.cn/s/blog_4ae5be930100nyfw.html
+objcopy -I binary -O elf64-x86-64 image.jpg image.o
