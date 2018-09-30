@@ -15,3 +15,5 @@ leaq a(b, c, d), %rax
 先计算地址a + b + c * d，然后把最终地址载到寄存器rax中
 https://my.oschina.net/guonaihong/blog/508907
 
+中断
+https://www.xuebuyuan.com/1493804.html
