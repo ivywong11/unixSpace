@@ -9,3 +9,9 @@ objcopy -I binary -O elf64-x86-64 image.jpg image.o
 处理器对
 以2到整数次方对齐的取值运算
 相比非对齐状态下速度快很多
+
+lea指令
+leaq a(b, c, d), %rax
+先计算地址a + b + c * d，然后把最终地址载到寄存器rax中
+https://my.oschina.net/guonaihong/blog/508907
+
