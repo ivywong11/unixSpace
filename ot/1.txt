@@ -7,5 +7,9 @@ https://www.cnblogs.com/Anker/p/6079580.html
 AST
 https://www.jianshu.com/p/a827a95fde17
 
+
 Android系统启动流程
 https://blog.csdn.net/qq_30993595/article/details/82714409
+
+http://www.m9dy.com/juqingpian/yushentongxingzuiyufa/
+
