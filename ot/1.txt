@@ -15,3 +15,12 @@ http://www.m9dy.com/juqingpian/yushentongxingzuiyufa/
 
 maven地址
 https://search.maven.org/
+
+servlet
+https://www.cnblogs.com/whgk/p/6399262.html
+https://blog.csdn.net/qq_19782019/article/details/80292110
+https://www.ibm.com/developerworks/cn/java/j-lo-servlet/
+https://blog.csdn.net/iam333/article/details/8228845
+
+struts2
+https://www.jianshu.com/p/0b840a106cf9
