@@ -1,0 +1,21 @@
+编译android内核:
+1.交叉编译添加到环境变量中
+export PATH=$PATH:/home/mini/Android/prebuilt/linux-x86/toolchain/arm-eabi-4.4.3/bin
+2.修改硬件配置文件
+make goldfish_defconfig
+将目录arch/arm/configs/下的goldfish_defconfig文件内的Kconfig配置内容复制到kernel目录下的.config中
+3.make
+
+make menuconfig命令，会读取arch/$(ARCH)目录下的Kconfig文件
+$(ARCH）在根目录的mk文件中设置->arm
+一般添加一个确定，在目录下添加Kconfig(编译选项:1.内建在内核中 2.编译成内核模块 3.不编译到内核)
+还需要添加一个mk文件，为编译脚本
+
+这里，我要将新增模块单独编译，所以就添加Kconfig文件，但是系统本身需要，支持动态加载，和动态卸载
+
+make menuconfig
+1.选择Enable loadable modul suppot
+Forced module loading
+允许模块强制加载
+Module unloading
+允许卸载
