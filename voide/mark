@@ -1,0 +1,10 @@
+MediaPlayer基本使用
+1.new 创建对象
+2.setDataSource(File)
+3.prepare()
+
+4.MediaPlayer如果没播放 !isPlaying()则 start()
+5.isPlaying在播放可以暂停 pause()
+6.在播放，可以reset 重新setDataSource prepare 
+
+7.stop  release
