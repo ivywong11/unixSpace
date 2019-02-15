@@ -1,0 +1,37 @@
+ioctl(int d, int request, ...);
+1.文件描述符
+2.代表不同操作的数字值->操作码->命令
+3. ...参数个数可变的函数原型声明形式，这里表示第三个参数可有可无
+
+对应的驱动接口函数,unlocked_ioctl
+compat_ioctl，为了处理32位程序和64位内核兼容的函数接口
+之前，对应的是ioctl，因为在接口调用之前需要获取大内核锁，会导致内核其他需要大内核锁代码延迟，后废除
+
+31-30 00命令不带参数
+      10 命令需要从驱动中获取数据，读方向
+      01 命令需要把数据写入驱动，写方向
+      11 命令既要写入数据又要获取数据，读写双向
+
+29-16 如果命令带参数，则指定参数所占用的内存空间大小
+
+15-8  每个驱动全局唯一的幻数
+
+7-0   命令码
+
+#define _IOC(dir, type, nr, size) //四个部分位移合在一起
+
+dir 对应31-30
+type 对应15-8
+nr 对应命令码
+size 对应29-16
+
+#define _IOW(type, nr, size)
+
+ioctl调用过程
+
+1.sys_ioctl
+	1.security_file_ioctl
+	2.do_vfs_ioctl
+		先switch一些命令，最后调用vfs_ioctl,vfs_ioctl里面最后调用了unlocked_ioctl,如果命令和switch里面的一样，则不会继续往下，调用到unlocked_ioctl
+
+
