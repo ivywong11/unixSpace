@@ -6,7 +6,7 @@
 #include<fcntl.h>
 #include<errno.h>
 
-#include<4_1.h>
+#include "4_1.h"
 
 int main(int arg, char *argv[])
 {
@@ -14,20 +14,20 @@ int main(int arg, char *argv[])
 	int ret;
 	unsigned int baud;
 	struct option opt = {8, 1, 1};
-	fd = open("/dev/vser0", O_RDWR);
+	fd = open("/dev/vser4_1", O_RDWR);
 	if(fd == -1)
 		goto fail;
 	baud = 9600;
-	ret = ioctl(fd, 4_1_SET_BAUD, baud);
+	ret = ioctl(fd, _4_1_SET_BAUD, baud);
 	if(ret == -1)
 		goto fail;
-	ret = ioctl(fd, 4_1_GET_BAUD, baud);
+	ret = ioctl(fd, _4_1_GET_BAUD, baud);
 	if(ret == -1)
 		goto fail;
-	ret = ioctl(fd, 4_1_SET_FFMT, &opt);
+	ret = ioctl(fd, _4_1_SET_FFMT, &opt);
 	if(ret == -1)
 		goto fail;
-	ret = ioctl(fd, 4_1_GET_FFMT, &opt);
+	ret = ioctl(fd, _4_1_GET_FFMT, &opt);
 	if(ret == -1)
 		goto fail;
 	printf("baud rate: %d\n", baud);

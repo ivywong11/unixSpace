@@ -6,74 +6,76 @@
 #include<linux/kfifo.h>
 #include<linux/ioctl.h>
 #include<linux/uaccess.h>
-#include<4_1.h>
+#include <linux/proc_fs.h>
+#include <linux/seq_file.h>
+#include "4_2.h"
 
-#define 4_1_MAJOR 256//主设备号
-#define 4_1_MINOR 0//次设备号
-#define 4_1_DEV_CNT 1
-#define 4_1_DEV_NAME "4_1"//设备名
+#define _4_2_MAJOR 256//主设备号
+#define _4_2_MINOR 0//次设备号
+#define _4_2_DEV_CNT 1
+#define _4_2_DEV_NAME "4_2"//设备名
 
-struct 4_1_dev {
+struct _4_2_dev {
 	unsigned int baud;//波特率
 	struct option opt;
 	struct cdev cdev;
 	//添加了两个proc_dir_entry类型指针成员
 	struct proc_dir_entry *pdir;
 	struct proc_dir_entry *pdat;
-}
+};
 //初始化一个名叫4_1_fifo的kfifo对象
-DEFINE_KFIFO(4_1_fifo, char, 32);
-static struct 4_1_dev vsdev;
+DEFINE_KFIFO(_4_2_fifo, char, 32);
+static struct _4_2_dev vsdev;
 //实现了设备的打开函数
-static int 4_1_open(struct inode *inode, struct file *filp)
+static int _4_2_open(struct inode *inode, struct file *filp)
 {
-	printk("drivers open\n")
+	printk("drivers open\n");
 	return 0;
 }
 //实现了设备关闭函数
-static int 4_1_release(struct indoe *inode, struct file *filp)
+static int _4_2_release(struct inode *inode, struct file *filp)
 {
-	printk("drivers release\n")
+	printk("drivers release\n");
 	return 0;
 }
 //read系统调用的驱动实现
-static ssize_t 4_1_read(struct file *filp, char __user *buf, size_t count, loff_t *pos)
+static ssize_t _4_2_read(struct file *filp, char __user *buf, size_t count, loff_t *pos)
 {
 	int ret;
 	unsigned int copied = 0;
-	ret = kfifo_to_user(&4_1_fifo, buf, count, &copied);
+	ret = kfifo_to_user(&_4_2_fifo, buf, count, &copied);
 	return ret == 0 ? copied : ret;
 }
 //write系统调用的驱动实现
-static ssize_t 4_1_write(struct file *filp, const char __user *buf, size_t count, loff_t *pos)
+static ssize_t _4_2_write(struct file *filp, const char __user *buf, size_t count, loff_t *pos)
 {
 	int ret;
 	unsigned int copied = 0;
-	ret = kfifo_from_user(&4_1_fifo, buf, count, &copied);
+	ret = kfifo_from_user(&_4_2_fifo, buf, count, &copied);
 	return ret == 0 ?  copied : ret;
 }
 
-static long 4_1_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+static long _4_2_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	//通过_IOC_TYPE宏取出命令中的幻数，如果不匹配则返回-ENOTTY表示参数不对
-	if(_IOC_TYPE(cmd) != 4_1_MAGIC)
+	if(_IOC_TYPE(cmd) != _4_2_MAGIC)
 		return -ENOTTY;
 	switch(cmd){
 		//根据命令匹配相应操作
-		case 4_1_SET_BAUD:
+		case _4_2_SET_BAUD:
 			//直接传递波特率数据
 			vsdev.baud = arg;
 			break;
-		case 4_1_GET_BAUD:
+		case _4_2_GET_BAUD:
 			arg = vsdev.baud;
 			break;
-		case 4_1_SET_FFMT:
+		case _4_2_SET_FFMT:
 			//传递指针,从用户传递过来的数据复制到opt,复制长度struct option,函数返回未复制成功字节数,该函数调用了access_ok来验证用户空间的内存是否真实可读，避免了在内核中嗯的缺页故障带来的问题,该函数可能会使进程休眠，如果只是简单的复制，还可以使用get_user(val, (int __user *)arg); put_user(ret, (int __user *)arg)
-			if((copy_from_user(&vsdev.opt, (struct option __user *)arg, sizeof(struct option)))
+			if(copy_from_user(&vsdev.opt, (struct option __user *)arg, sizeof(struct option)))
 			return -EFAULT;
 			break;
-		case 4_1_GET_FFMT:
-			if(copy_to_user(struct option __user*)arg, &vsdev.opt, sizeof(struct option));
+		case _4_2_GET_FFMT:
+			if(copy_to_user((struct option __user*)arg, &vsdev.opt, sizeof(struct option)))
 			return -EFAULT;
 			break;
 		default:
@@ -81,27 +83,49 @@ static long 4_1_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	}
 	return 0;
 }
-static struct file_operations 4_1_ops = {
+static struct file_operations _4_2_ops = {
 	.owner = THIS_MODULE,
-	.open = 4_1_open,
-	.release = 4_1_release,
-	.read = 4_1_read,
-	.write = 4_1_write,
+	.open = _4_2_open,
+	.release = _4_2_release,
+	.read = _4_2_read,
+	.write = _4_2_write,
 	//添加了.unclocked接口，实现的函数是4_1_ioctl
-	.unclocked = 4_1_ioctl,
+	.unlocked_ioctl = _4_2_ioctl,
+};
+
+static int dat_show(struct seq_file *m, void *v)
+{
+	struct _4_2_dev *dev = m->private;
+
+	seq_printf(m, "baudrate: %d\n", dev->baud);
+	return seq_printf(m, "frame format: %d%c%d\n", dev->opt.datab, \
+			dev->opt.parity == 0 ? 'N' : dev->opt.parity == 1 ? 'O': 'E', \
+			dev->opt.stopb);
 }
 
-static int __init 4_1_inint(void)
+static int proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, dat_show, PDE_DATA(inode));
+}
+
+static struct file_operations proc_ops = {
+	.owner = THIS_MODULE,
+	.open = proc_open,
+	.release = single_release,
+	.read = seq_read,
+	.llseek = seq_lseek,
+};
+static int __init _4_2_init(void)
 {
 	int ret;
 	dev_t dev;
 	//合成设备号，注册到内核
-	dev = MKDEV(4_1_MAJOR, 4_1_MINOR);
-	ret = register_chrdev_region(dev, VSER_DEV_CNT, 4_1_NAME);
+	dev = MKDEV(_4_2_MAJOR, _4_2_MINOR);
+	ret = register_chrdev_region(dev, _4_2_DEV_CNT, _4_2_DEV_NAME);
 	if(ret)
 		goto reg_err;
 	//初始化cdev，将cdev中的ops指向4_1_ops
-	cdev_init(&vsdev.cdev, &4_1_ops);
+	cdev_init(&vsdev.cdev, &_4_2_ops);
 	//cdev中的owner指向THIS_MODULE
 	vsdev.cdev.owner = THIS_MODULE;
 	//初始化vsdev中的成员
@@ -110,7 +134,7 @@ static int __init 4_1_inint(void)
 	vsdev.opt.parity = 0;//奇偶校验
 	vsdev.opt.stopb = 1;//停止位
 	//将cdev添加到内核cdev_map中
-	ret = cdev_add(&vsdev.cdev, dev, VSER_DEV_CNT);
+	ret = cdev_add(&vsdev.cdev, dev, _4_2_DEV_CNT);
 	if(ret)
 		goto add_err;
 	//创建vser目录，第二个参数为NULL,表示在/proc目录下
@@ -122,23 +146,27 @@ static int __init 4_1_inint(void)
 	if(!vsdev.pdat)
 		goto dat_err;
 	return 0;
+dat_err:
+	remove_proc_entry("vser", NULL);
+dir_err:
+	cdev_del(&vsdev.cdev);
 add_err:
 	//如果添加失败，则将设备号注销
-	unregister_chrdev_region(dev, VSER_DEV_CNT);
+	unregister_chrdev_region(dev, _4_2_DEV_CNT);
 reg_err:
 	return ret;
 }
 
-static void __exit 4_1_exit(void)
+static void __exit _4_2_exit(void)
 {
 	dev_t dev;
-	dev = MKDEV(4_1_MAJOR, 4_1_MINOR);
+	dev = MKDEV(_4_2_MAJOR, _4_2_MINOR);
 	cdev_del(&vsdev.cdev);
-	unregister_chrdev_region(dev, VSER_DEV_CNT);
+	unregister_chrdev_region(dev, _4_2_DEV_CNT);
 }
 
-modult_init(4_1_init);
-modult_exit(4_1_exit);
+module_init(_4_2_init);
+module_exit(_4_2_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("yemin");
