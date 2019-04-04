@@ -1,0 +1,52 @@
+frameworks\av\media\mediaserver
+	->main_mediaserver.cpp
+		//获取一个ProcessState实例
+		sp<ProcessState> proc(ProcessState::self());
+		//调用defaultServiceManager方法获取IServiceManager
+		sp<IServiceManager> sm = defaultServiceManager();
+		//初始化音频系统的AudioFlinger服务 音频系统核心服务
+		AudioFlinger::instantiate();
+		//音频系统的AudioPolicyService服务 音频系统关于音频策略服务
+		AudioPolicyService::instantiate();
+		//多媒体系统的MediaPlayerService服务
+		MediaPlayerService::instantiate();
+		ResourceManagerService::instantiate();
+        CameraService::instantiate();
+        SoundTriggerHwService::instantiate();
+        RadioService::instantiate();
+        registerExtensions();
+        ProcessState::self()->startThreadPool();
+        IPCThreadState::self()->joinThreadPool();
+		
+frameworks\native\libs\binder\ProcessState.cpp
+ProcessState::ProcessState()
+    : mDriverFD(open_driver())
+
+getContextObject
+sp<IBinder> ProcessState::getContextObject(const sp<IBinder>& /*caller*/)
+{
+    return getStrongProxyForHandle(0);
+}
+
+frameworks\native\libs\binder\IServiceManager.cpp
+sp<IServiceManager> defaultServiceManager()
+{
+    if (gDefaultServiceManager != NULL) return gDefaultServiceManager;
+    {
+        AutoMutex _l(gDefaultServiceManagerLock);
+        while (gDefaultServiceManager == NULL) {
+            gDefaultServiceManager = interface_cast<IServiceManager>(
+                ProcessState::self()->getContextObject(NULL));
+            if (gDefaultServiceManager == NULL)
+                sleep(1);
+        }
+    }
+    return gDefaultServiceManager;
+}
+
+frameworks\native\libs\binder\BpBinder.cpp
+
+
+frameworks\native\include\binder\IInterface.h
+
+
