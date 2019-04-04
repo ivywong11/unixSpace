@@ -12,3 +12,6 @@ https://www.cnblogs.com/Sharley/p/5748689.html
 https://blog.csdn.net/zyuanyun/article/details/60890534
 https://blog.csdn.net/charleslei/article/details/53099428
 https://blog.csdn.net/yangwen123/article/details/39989751
+
+
+pacman -S diffutils
